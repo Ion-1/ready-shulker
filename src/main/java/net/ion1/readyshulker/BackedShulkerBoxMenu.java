@@ -1,4 +1,5 @@
 package net.ion1.readyshulker;
+
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
