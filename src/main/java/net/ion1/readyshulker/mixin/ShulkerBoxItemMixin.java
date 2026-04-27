@@ -55,7 +55,6 @@ public abstract class ShulkerBoxItemMixin {
         }
 
         if (other.isEmpty() && (!(serverPlayer.containerMenu instanceof BackedShulkerBoxMenu shulkerMenu) || !shulkerMenu.isBackingStack(self))) {
-            player.containerMenu.setCarried(ItemStack.EMPTY);
             cir.setReturnValue(true);
             cir.cancel();
             readyShulker$openShulkerMenu(self, shulkerBlock, player);
@@ -91,7 +90,8 @@ public abstract class ShulkerBoxItemMixin {
         }
 
         // We enqueue the menu opening so the clicked method can wrap up
-        // A SimpleMenuProvider would have the InventoryMenu.carried to be set to the shulker stack
+        // A SimpleMenuProvider would have the InventoryMenu.carried be set to the shulker stack
+        // client-side
         QueuedMenuProvider.enqueue(
                 serverPlayer,
                 (containerId, inventory, _)
