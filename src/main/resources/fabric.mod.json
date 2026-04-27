@@ -3,17 +3,18 @@
 	"id": "ready-shulker",
 	"version": "${version}",
 	"name": "Ready Shulker",
-	"description": "Readily access your shulkers from your inventory",
+	"description": "Readily access your shulkers from your inventory via right-click",
 	"authors": [
-		"Me!"
+		"Ion-1"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/Ion-1/ready-shulker",
+		"sources": "https://github.com/Ion-1/ready-shulker.git",
+		"issues": "https://github.com/Ion-1/ready-shulker/issues"
 	},
 	"license": "MIT",
 	"icon": "assets/ready-shulker/icon.png",
-	"environment": "server",
+	"environment": "*",
 	"entrypoints": {
 		"main": [
 			"net.ion1.readyshulker.ReadyShulker"
