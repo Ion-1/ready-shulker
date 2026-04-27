@@ -1,0 +1,55 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v1.0.0"
+        required: true
+      changelog:
+        description: "Release changelog"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v6
+
+      - name: validate gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+      - name: setup jdk
+        uses: actions/setup-java@v5
+        with:
+          java-version: "25"
+          distribution: "microsoft"
+
+      - name: make gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: build
+        run: ./gradlew build
+
+      - name: rename jars
+        run: |
+          MC_VERSION="$(jq -r '.depends.minecraft' src/main/resources/fabric.mod.json | tr -d '~')"
+          mkdir -p release
+
+          for jar in build/libs/*.jar; do
+            cp "$jar" "release/${{ github.event.repository.name }}-${{ inputs.tag }}+${MC_VERSION}.jar"
+          done
+
+      - name: create release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: ${{ inputs.tag }}
+          body: ${{ inputs.changelog }}
+          files: release/*.jar
