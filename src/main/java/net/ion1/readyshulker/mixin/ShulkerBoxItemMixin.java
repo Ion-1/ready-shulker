@@ -33,35 +33,48 @@ public abstract class ShulkerBoxItemMixin {
 
     @Inject(method = "overrideOtherStackedOnMe", at = @At("HEAD"), cancellable = true)
     private void readyShulker$overrideOtherStackedOnMe(ItemStack self, ItemStack other, Slot slot, ClickAction clickAction, Player player, SlotAccess carriedItem, CallbackInfoReturnable<Boolean> cir) {
+        // It is a right-click
         if (!(clickAction == ClickAction.SECONDARY)) {
             return;
         }
 
+        // and we can modify the slot
         if (!(slot.allowModification(player))) {
             return;
         }
 
+        // and the item being right-clicked is a block item
         if (!(self.getItem() instanceof BlockItem blockItem)) {
             return;
         }
 
+        // and the block item is a shulker box
         Block block = blockItem.getBlock();
         if (!(block instanceof ShulkerBoxBlock shulkerBlock)) {
             return;
         }
 
+        // and the player is a server player
         if (!(player instanceof ServerPlayer serverPlayer)) {
             return;
         }
 
-        if (other.isEmpty() && (!(serverPlayer.containerMenu instanceof BackedShulkerBoxMenu shulkerMenu) || !shulkerMenu.isBackingStack(self))) {
+        // If we are right-clicking with an empty hand
+        // ASSUMPTION: Shulker boxes can not be nested, so we don't need to check if self is open
+        //             from a BackedShulkerBoxMenu.
+        if (other.isEmpty()) {
+            // When right-clicking the already open shulker box we do nothing but override the
+            // default behavior to prevent the shulker box from being picked up whilst the menu is still open
+            if (!((serverPlayer.containerMenu instanceof BackedShulkerBoxMenu shulkerMenu) && shulkerMenu.isBackingStack(self))) {
+                readyShulker$openShulkerMenu(self, shulkerBlock, player);
+                playOpenSound(player);
+            }
             cir.setReturnValue(true);
             cir.cancel();
-            readyShulker$openShulkerMenu(self, shulkerBlock, player);
-            playOpenSound(player);
             return;
         }
 
+        // A server player is right-clicking a shulker box with an item in hand
         boolean success = readyShulker$insertIntoBox(self, other, carriedItem, serverPlayer);
         if (success) {
             playInsertSound(player);
