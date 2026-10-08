@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(AbstractContainerMenu.class)
 public abstract class BackedShulkerBoxMenuMixin {
-    @Inject(method = "broadcastChanges", at = @At("TAIL"))
+    @Inject(method = "broadcastChanges", at = @At("HEAD"))
     private void onChangesBroadcast(CallbackInfo ci) {
         readyShulker$syncIfBackedShulkerBox();
     }
