@@ -66,7 +66,7 @@ public abstract class ShulkerBoxItemMixin {
             // When right-clicking the already open shulker box we do nothing but override the
             // default behavior to prevent the shulker box from being picked up whilst the menu is still open
             if (!((serverPlayer.containerMenu instanceof BackedShulkerBoxMenu shulkerMenu) && shulkerMenu.isBackingStack(self))) {
-                readyShulker$openShulkerMenu(self, shulkerBlock, player);
+                readyShulker$openShulkerMenu(self, shulkerBlock, serverPlayer);
                 playOpenSound(player);
             }
             cir.setReturnValue(true);
@@ -86,11 +86,7 @@ public abstract class ShulkerBoxItemMixin {
     }
 
     @Unique
-    private static void readyShulker$openShulkerMenu(ItemStack shulkerStack, ShulkerBoxBlock block, Player player) {
-        if (!(player instanceof ServerPlayer serverPlayer)) {
-            return;
-        }
-
+    private static void readyShulker$openShulkerMenu(ItemStack shulkerStack, ShulkerBoxBlock block, ServerPlayer serverPlayer) {
         NonNullList<ItemStack> items = NonNullList.withSize(SHULKER_SLOT_COUNT, ItemStack.EMPTY);
         ItemContainerContents contents = shulkerStack.get(DataComponents.CONTAINER);
         if (contents != null) {
