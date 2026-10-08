@@ -45,7 +45,7 @@ public class BackedShulkerBoxMenu extends ShulkerBoxMenu {
         return super.stillValid(player) && isBackedByPlayerInventory(player, this.backing);
     }
 
-    private static boolean isBackedByPlayerInventory(Player player, @NonNull ItemStack backingStack) {
+    public static boolean isBackedByPlayerInventory(Player player, @NonNull ItemStack backingStack) {
         if (backingStack.isEmpty()) {
             return false;
         }

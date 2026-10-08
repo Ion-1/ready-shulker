@@ -18,8 +18,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
+
 import java.util.function.BiConsumer;
 import java.util.function.IntFunction;
+
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -104,7 +106,12 @@ public abstract class ShulkerBoxItemMixin {
         QueuedMenuProvider.enqueue(
                 serverPlayer,
                 (containerId, inventory, _)
-                        -> new BackedShulkerBoxMenu(containerId, inventory, container, shulkerStack),
+                        -> {
+                    if (!BackedShulkerBoxMenu.isBackedByPlayerInventory(serverPlayer, shulkerStack)) {
+                        return null;
+                    }
+                    return new BackedShulkerBoxMenu(containerId, inventory, container, shulkerStack);
+                },
                 block.getName());
     }
 
