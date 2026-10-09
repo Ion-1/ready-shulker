@@ -1,165 +1,93 @@
 package net.ion1.readyshulker.mixin;
 
-import net.ion1.readyshulker.BackedShulkerBoxMenu;
 import net.ion1.readyshulker.QueuedMenuProvider;
-import net.minecraft.core.NonNullList;
-import net.minecraft.core.component.DataComponents;
+import net.ion1.readyshulker.container.ItemStackBackedContainer;
+import net.ion1.readyshulker.container.SharedShulkerContainers;
+import net.ion1.readyshulker.menu.ShulkerStackBackedContainerMenu;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
-import net.minecraft.world.SimpleContainer;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.world.Container;
 import net.minecraft.world.entity.SlotAccess;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickAction;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
-
-import java.util.function.BiConsumer;
-import java.util.function.IntFunction;
-
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.function.BiConsumer;
+import java.util.function.IntFunction;
+
 @Mixin(Item.class)
 public abstract class ShulkerBoxItemMixin {
     @Unique
-    private static final int SHULKER_SLOT_COUNT = 27;
+    private static boolean readyShulker$isOpenBackingMenu(AbstractContainerMenu menu, Container parent, int parentSlot, ItemStack expectedStack) {
+        return menu instanceof ShulkerStackBackedContainerMenu shulkerMenu && shulkerMenu.matchesBackingLocation(parent, parentSlot, expectedStack);
+    }
 
-    @Inject(method = "overrideOtherStackedOnMe", at = @At("HEAD"), cancellable = true)
-    private void readyShulker$overrideOtherStackedOnMe(ItemStack self, ItemStack other, Slot slot, ClickAction clickAction, Player player, SlotAccess carriedItem, CallbackInfoReturnable<Boolean> cir) {
-        // It is a right-click
-        if (!(clickAction == ClickAction.SECONDARY)) {
-            return;
-        }
-
-        // and we can modify the slot
-        if (!(slot.allowModification(player))) {
-            return;
-        }
-
-        // and the item being right-clicked is a block item
-        if (!(self.getItem() instanceof BlockItem blockItem)) {
-            return;
-        }
-
-        // and the block item is a shulker box
-        Block block = blockItem.getBlock();
-        if (!(block instanceof ShulkerBoxBlock shulkerBlock)) {
-            return;
-        }
-
-        // and the player is a server player
-        if (!(player instanceof ServerPlayer serverPlayer)) {
-            return;
-        }
-
-        // If we are right-clicking with an empty hand
-        // ASSUMPTION: Shulker boxes can not be nested, so we don't need to check if self is open
-        //             from a BackedShulkerBoxMenu.
-        if (other.isEmpty()) {
-            // When right-clicking the already open shulker box we do nothing but override the
-            // default behavior to prevent the shulker box from being picked up whilst the menu is still open
-            if (!((serverPlayer.containerMenu instanceof BackedShulkerBoxMenu shulkerMenu) && shulkerMenu.isBackingStack(self))) {
-                readyShulker$openShulkerMenu(self, shulkerBlock, serverPlayer);
-                playOpenSound(player);
+    @Unique
+    private static void readyShulker$openShulkerMenu(Container parent, int parentSlot, ItemStack expectedStack, ShulkerBoxBlock block, ServerPlayer serverPlayer) {
+        QueuedMenuProvider.enqueue(serverPlayer, (containerId, inventory, player) -> {
+            if (!parent.stillValid(player)) {
+                return null;
             }
-            cir.setReturnValue(true);
-            cir.cancel();
-            return;
-        }
 
-        // A server player is right-clicking a shulker box with an item in hand
-        boolean success = readyShulker$insertIntoBox(self, other, carriedItem, serverPlayer);
-        if (success) {
-            playInsertSound(player);
-        } else {
-            playInsertFailSound(player);
-        }
-        cir.setReturnValue(true);
-        cir.cancel();
+            if (parentSlot < 0 || parentSlot >= parent.getContainerSize()) {
+                return null;
+            }
+
+            ItemStack current = parent.getItem(parentSlot);
+            if (current.isEmpty()) {
+                return null;
+            }
+
+            if (current != expectedStack) {
+                return null;
+            }
+
+            ItemStackBackedContainer backingContainer = SharedShulkerContainers.acquire(expectedStack, parent, parentSlot);
+            try {
+                return new ShulkerStackBackedContainerMenu(containerId, inventory, parent, parentSlot, expectedStack, backingContainer);
+            } catch (RuntimeException | Error e) {
+                SharedShulkerContainers.release(expectedStack, backingContainer);
+                throw e;
+            }
+        }, block.getName());
     }
 
     @Unique
-    private static void readyShulker$openShulkerMenu(ItemStack shulkerStack, ShulkerBoxBlock block, ServerPlayer serverPlayer) {
-        NonNullList<ItemStack> items = NonNullList.withSize(SHULKER_SLOT_COUNT, ItemStack.EMPTY);
-        ItemContainerContents contents = shulkerStack.get(DataComponents.CONTAINER);
-        if (contents != null) {
-            contents.copyInto(items);
-        }
-
-        SimpleContainer container = new SimpleContainer(SHULKER_SLOT_COUNT);
-        for (int i = 0; i < items.size(); i++) {
-            container.setItem(i, items.get(i).copy());
-        }
-
-        // We enqueue the menu opening so the clicked method can wrap up
-        // A SimpleMenuProvider would have the InventoryMenu.carried be set to the shulker stack
-        // client-side
-        QueuedMenuProvider.enqueue(
-                serverPlayer,
-                (containerId, inventory, _)
-                        -> {
-                    if (!BackedShulkerBoxMenu.isBackedByPlayerInventory(serverPlayer, shulkerStack)) {
-                        return null;
-                    }
-                    return new BackedShulkerBoxMenu(containerId, inventory, container, shulkerStack);
-                },
-                block.getName());
-    }
-
-    @Unique
-    private static boolean readyShulker$insertIntoBox(ItemStack shulkerStack, ItemStack carriedStack, SlotAccess carriedSlot, ServerPlayer serverPlayer) {
+    private static boolean readyShulker$insertIntoBox(Container parent, int parentSlot, ItemStack expectedStack, ItemStack carriedStack, SlotAccess carriedSlot, ServerPlayer serverPlayer) {
         if (!carriedStack.getItem().canFitInsideContainerItems()) {
             return false;
         }
 
-        if (serverPlayer.containerMenu instanceof BackedShulkerBoxMenu shulkerMenu && shulkerMenu.isBackingStack(shulkerStack)) {
-            SimpleContainer container = shulkerMenu.getBackingContainer();
-            ItemStack remainder = readyShulker$insertIntoContainer(container, carriedStack);
+        // Reuse the same live inventory as any open shulker menu, even when it
+        // originated from a different player's interaction
+        ItemStackBackedContainer backingContainer = SharedShulkerContainers.acquire(expectedStack, parent, parentSlot);
+        try {
+            ItemStack remainder = readyShulker$insertIntoContainer(backingContainer, carriedStack);
             int inserted = carriedStack.getCount() - remainder.getCount();
             if (inserted <= 0) {
                 return false;
             }
-
             carriedSlot.set(remainder.isEmpty() ? ItemStack.EMPTY : remainder);
-            shulkerMenu.syncBackingFromContainer();
             return true;
+        } finally {
+            SharedShulkerContainers.release(expectedStack, backingContainer);
         }
-
-        ItemContainerContents contents = shulkerStack.get(DataComponents.CONTAINER);
-        NonNullList<ItemStack> items = NonNullList.withSize(SHULKER_SLOT_COUNT, ItemStack.EMPTY);
-        if (contents != null) {
-            contents.copyInto(items);
-        }
-
-        ItemStack remainder = readyShulker$insertIntoItems(items, carriedStack);
-
-        int inserted = carriedStack.getCount() - remainder.getCount();
-        if (inserted <= 0) {
-            return false;
-        }
-
-        shulkerStack.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(items));
-        carriedSlot.set(remainder.isEmpty() ? ItemStack.EMPTY : remainder);
-        return true;
     }
 
     @Unique
-    private static ItemStack readyShulker$insertIntoContainer(SimpleContainer container, ItemStack carriedStack) {
+    private static ItemStack readyShulker$insertIntoContainer(Container container, ItemStack carriedStack) {
         return readyShulker$insertIntoSlots(container.getContainerSize(), container::getItem, container::setItem, carriedStack);
-    }
-
-    @Unique
-    private static ItemStack readyShulker$insertIntoItems(NonNullList<ItemStack> items, ItemStack carriedStack) {
-        return readyShulker$insertIntoSlots(items.size(), items::get, items::set, carriedStack);
     }
 
     @Unique
@@ -191,18 +119,63 @@ public abstract class ShulkerBoxItemMixin {
     }
 
     @Unique
-    private static void playInsertSound(final Entity entity) {
-        entity.playSound(SoundEvents.BUNDLE_INSERT, 0.8F, 0.8F + entity.level().getRandom().nextFloat() * 0.4F);
+    private static void playInsertSound(Player player) {
+        player.playSound(SoundEvents.BUNDLE_INSERT, 0.8F, 1.0F);
     }
 
     @Unique
-    private static void playInsertFailSound(final Entity entity) {
-        entity.playSound(SoundEvents.BUNDLE_INSERT_FAIL, 1.0F, 1.0F);
+    private static void playInsertFailSound(Player player) {
+        player.playSound(SoundEvents.BUNDLE_INSERT_FAIL, 1.0F, 1.0F);
     }
 
     @Unique
-    private static void playOpenSound(final Entity entity) {
-        entity.playSound(SoundEvents.SHULKER_BOX_OPEN, 1.0F, 1.0F);
+    private static void playOpenSound(Player player) {
+        player.playSound(SoundEvents.SHULKER_BOX_OPEN, 1.0F, 1.0F);
+    }
+
+    @Inject(method = "overrideOtherStackedOnMe", at = @At("HEAD"), cancellable = true)
+    private void readyShulker$overrideOtherStackedOnMe(ItemStack self, ItemStack other, Slot slot, ClickAction clickAction, Player player, SlotAccess carriedItem, CallbackInfoReturnable<Boolean> cir) {
+        if (clickAction != ClickAction.SECONDARY || !slot.allowModification(player)) {
+            return;
+        }
+
+        if (!(self.getItem() instanceof BlockItem blockItem)) {
+            return;
+        }
+
+        Block block = blockItem.getBlock();
+        if (!(block instanceof ShulkerBoxBlock shulkerBlock)) {
+            return;
+        }
+
+        if (!(player instanceof ServerPlayer serverPlayer)) {
+            return;
+        }
+
+        Container parent = slot.container;
+        int parentSlot = slot.getContainerSlot();
+        ItemStack expectedStack = parent.getItem(parentSlot);
+
+        if (other.isEmpty()) {
+            if (!readyShulker$isOpenBackingMenu(serverPlayer.containerMenu, parent, parentSlot, expectedStack)) {
+                readyShulker$openShulkerMenu(parent, parentSlot, expectedStack, shulkerBlock, serverPlayer);
+                playOpenSound(player);
+            }
+
+            cir.setReturnValue(true);
+            cir.cancel();
+            return;
+        }
+
+        boolean success = readyShulker$insertIntoBox(parent, parentSlot, expectedStack, other, carriedItem, serverPlayer);
+        if (success) {
+            playInsertSound(player);
+        } else {
+            playInsertFailSound(player);
+        }
+
+        cir.setReturnValue(true);
+        cir.cancel();
     }
 }
 

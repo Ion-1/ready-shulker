@@ -1,8 +1,6 @@
 package net.ion1.readyshulker;
 
-import java.util.ArrayDeque;
-import java.util.Queue;
-
+import net.ion1.readyshulker.menu.ShulkerStackBackedContainerMenu;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.MenuProvider;
@@ -12,6 +10,9 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.MenuConstructor;
 import org.jspecify.annotations.NonNull;
+
+import java.util.ArrayDeque;
+import java.util.Queue;
 
 /**
  * Defers menu open calls until the next server tick.
@@ -35,10 +36,16 @@ public final class QueuedMenuProvider implements MenuProvider {
             // Avoid a client close-screen roundtrip when swapping between our shulker menus.
             // closeContainer() sends ClientboundContainerClosePacket, which makes the client
             // briefly leave GUI mode and recenter the mouse cursor before the next screen opens.
-            if (queued.player().containerMenu instanceof BackedShulkerBoxMenu) {
+            if (queued.player().containerMenu instanceof ShulkerStackBackedContainerMenu) {
                 queued.player().doCloseContainer();
             }
             queued.player().openMenu(queued.provider());
+            AbstractContainerMenu opened = queued.player().containerMenu;
+            if (!(opened instanceof ShulkerStackBackedContainerMenu)
+                    && opened != queued.player().inventoryMenu) {
+                ReadyShulker.LOGGER.warn("Unexpected menu after shulker open for player={}: {}",
+                        queued.player().getUUID(), opened == null ? "null" : opened.getClass().getName());
+            }
         }
     }
 
