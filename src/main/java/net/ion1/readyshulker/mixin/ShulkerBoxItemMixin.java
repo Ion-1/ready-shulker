@@ -3,6 +3,7 @@ package net.ion1.readyshulker.mixin;
 import net.ion1.readyshulker.QueuedMenuProvider;
 import net.ion1.readyshulker.container.ItemStackBackedContainer;
 import net.ion1.readyshulker.container.SharedShulkerContainers;
+import net.ion1.readyshulker.menu.ChestMenuTransfer;
 import net.ion1.readyshulker.menu.ShulkerStackBackedContainerMenu;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -10,6 +11,7 @@ import net.minecraft.world.Container;
 import net.minecraft.world.entity.SlotAccess;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ClickAction;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.BlockItem;
@@ -35,31 +37,22 @@ public abstract class ShulkerBoxItemMixin {
 
     @Unique
     private static void readyShulker$openShulkerMenu(Container parent, int parentSlot, ItemStack expectedStack, ShulkerBoxBlock block, ServerPlayer serverPlayer) {
+        ChestMenuTransfer transfer = serverPlayer.containerMenu instanceof ChestMenu chestMenu && chestMenu.getContainer() == parent ? (ChestMenuTransfer) chestMenu : null;
+        if (transfer != null) {
+            transfer.readyShulker$transferOnRemoval();
+        }
+
         QueuedMenuProvider.enqueue(serverPlayer, (containerId, inventory, player) -> {
-            if (!parent.stillValid(player)) {
-                return null;
-            }
-
-            if (parentSlot < 0 || parentSlot >= parent.getContainerSize()) {
-                return null;
-            }
-
-            ItemStack current = parent.getItem(parentSlot);
-            if (current.isEmpty()) {
-                return null;
-            }
-
-            if (current != expectedStack) {
+            boolean inheritedOpener = transfer != null && transfer.readyShulker$takeTransferred();
+            if (!parent.stillValid(player) || parentSlot < 0 || parentSlot >= parent.getContainerSize() || parent.getItem(parentSlot) != expectedStack || expectedStack.isEmpty()) {
+                if (inheritedOpener) {
+                    parent.stopOpen(player);
+                }
                 return null;
             }
 
             ItemStackBackedContainer backingContainer = SharedShulkerContainers.acquire(expectedStack, parent, parentSlot);
-            try {
-                return new ShulkerStackBackedContainerMenu(containerId, inventory, parent, parentSlot, expectedStack, backingContainer);
-            } catch (RuntimeException | Error e) {
-                SharedShulkerContainers.release(expectedStack, backingContainer);
-                throw e;
-            }
+            return new ShulkerStackBackedContainerMenu(containerId, inventory, parent, parentSlot, expectedStack, backingContainer, inheritedOpener);
         }, block.getName());
     }
 

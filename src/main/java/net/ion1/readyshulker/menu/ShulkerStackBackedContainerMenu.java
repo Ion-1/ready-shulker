@@ -2,6 +2,7 @@ package net.ion1.readyshulker.menu;
 
 import net.ion1.readyshulker.container.ItemStackBackedContainer;
 import net.ion1.readyshulker.container.SharedShulkerContainers;
+import net.minecraft.world.CompoundContainer;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -9,17 +10,20 @@ import net.minecraft.world.inventory.ShulkerBoxMenu;
 import net.minecraft.world.inventory.ShulkerBoxSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import org.jspecify.annotations.NonNull;
 
 public class ShulkerStackBackedContainerMenu extends ShulkerBoxMenu {
     private final Container parent;
+    private final boolean ownsParentOpener;
     private final int parentSlot;
     private final ItemStack expectedStack;
     private final ItemStackBackedContainer backingContainer;
 
-    public ShulkerStackBackedContainerMenu(int containerId, Inventory inventory, Container parent, int parentSlot, ItemStack expectedStack, ItemStackBackedContainer backingContainer) {
+    public ShulkerStackBackedContainerMenu(int containerId, Inventory inventory, Container parent, int parentSlot, ItemStack expectedStack, ItemStackBackedContainer backingContainer, boolean ownsParentOpener) {
         super(containerId, inventory, backingContainer);
         this.parent = parent;
+        this.ownsParentOpener = ownsParentOpener;
         this.parentSlot = parentSlot;
         this.expectedStack = expectedStack;
         this.backingContainer = backingContainer;
@@ -28,6 +32,10 @@ public class ShulkerStackBackedContainerMenu extends ShulkerBoxMenu {
 
     public Container parent() {
         return this.parent;
+    }
+
+    public boolean ownsChestOpener(ChestBlockEntity chest) {
+        return this.ownsParentOpener && (this.parent == chest || this.parent instanceof CompoundContainer compound && compound.contains(chest));
     }
 
     public ItemStackBackedContainer backingContainer() {
@@ -46,11 +54,11 @@ public class ShulkerStackBackedContainerMenu extends ShulkerBoxMenu {
 
     @Override
     public void removed(@NonNull Player player) {
-        try {
-            super.removed(player);
-        } finally {
-            SharedShulkerContainers.release(this.expectedStack, this.backingContainer);
+        super.removed(player);
+        if (this.ownsParentOpener) {
+            this.parent.stopOpen(player);
         }
+        SharedShulkerContainers.release(this.expectedStack, this.backingContainer);
     }
 
     private void installBackingSlots() {
