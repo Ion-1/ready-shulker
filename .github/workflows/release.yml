@@ -37,14 +37,18 @@ jobs:
       - name: build
         run: ./gradlew build
 
-      - name: rename jars
+      - name: package release jar
+        id: package
         run: |
           MC_VERSION="$(jq -r '.depends.minecraft' src/main/resources/fabric.mod.json | tr -d '~')"
+          echo "minecraft_version=$MC_VERSION" >> "$GITHUB_OUTPUT"
           mkdir -p release
-
-          for jar in build/libs/*.jar; do
-            cp "$jar" "release/${{ github.event.repository.name }}-${{ inputs.tag }}+${MC_VERSION}.jar"
-          done
+          mapfile -t jars < <(find build/libs -maxdepth 1 -name '*.jar' ! -name '*-sources.jar' ! -name '*-dev.jar')
+          if [ "${#jars[@]}" -ne 1 ]; then
+            echo "Expected one release JAR, found ${#jars[@]}" >&2
+            exit 1
+          fi
+          cp "${jars[0]}" "release/${{ github.event.repository.name }}-${{ inputs.tag }}+${MC_VERSION}.jar"
 
       - name: create release
         uses: softprops/action-gh-release@v3
@@ -53,3 +57,15 @@ jobs:
           name: ${{ inputs.tag }}
           body: ${{ inputs.changelog }}
           files: release/*.jar
+
+      - name: publish to Modrinth
+        uses: cloudnode-pro/modrinth-publish@v2
+        with:
+          token: ${{ secrets.MODRINTH_TOKEN }}
+          project: ${{ vars.MODRINTH_PROJECT_ID }}
+          name: ${{ inputs.tag }}
+          version: ${{ inputs.tag }}
+          changelog: ${{ inputs.changelog }}
+          loaders: fabric
+          game-versions: ${{ steps.package.outputs.minecraft_version }}
+          files: release/${{ github.event.repository.name }}-${{ inputs.tag }}+${{ steps.package.outputs.minecraft_version }}.jar
